@@ -1,55 +1,94 @@
-import random
-from itertools import permutations
 import pandas as pd
+def rotate_cycle(arr, cycle):
+    arr1 = arr.copy()
+    if period >= len(arr1): #if period greater than the subject
+        arr1 *= -(-period // len(arr1))  # Repeat subjects cyclically it will copy of 2*2
+    cycle %= len(arr1) # reminder value for index
+    return arr1[cycle:] + arr1[:cycle]
 
-def TestFunc(teacher_count):
-    # Define the sections, periods, and days
-    sections = ['Section A', 'Section B', 'Section C', 'Section D', 'Section E']
-    periods = ["tamil-priya", "english-sathiya", "maths-arun", "science-john", "social-hema"]
-    days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
+def generate_table(subject, cycles):
+    rows = []
+    for i in range(cycles): # This cycle used for generating 5 tables like 5 sections
+        for cycle in range(len(subject)): # based on subject it will generate the index
+            rows.append(rotate_cycle(subject, cycle + i)) #subjects with index + section index add
+        rows.append([])
+    return rows
 
-    # Function to check if the timetable has no duplicate subjects on the same period and day
-    def is_valid_timetable(timetable):
-        for day, period in enumerate(timetable):
-            if timetable.count(period) > 1:
-                return False
-        return True
+subject = ['Tamil', 'English', 'Maths', 'Science', 'Social']
+period = 5
+cycles = 5
 
-    # Generate all possible permutations of periods for each day
-    possible_timetables = permutations(periods, len(days))
+table = generate_table(subject, cycles)
+#run only one the period subject count not mactch.
+for l,k in enumerate(table):
+    if len(k) > period:
+        slice = len(k)-period 
+        for b in reversed(range(slice)): # remove operation for when the length of each not satisfy
+            if b+1 == 0:
+                break
+            else:
+                table[l].pop(b+period)
 
-    # Create an empty list to store valid timetables
-    valid_timetables = []
+print(table)
 
-    # Iterate through each timetable and check the uniqueness conditions
-    for timetable in possible_timetables:
-        if is_valid_timetable(timetable):
-            valid_timetables.append(timetable)
+result_df = pd.DataFrame(table)
+result_df.to_excel("Table3.xlsx", index=False, index_label=False)
 
-    # If teacher_count is less than the total number of periods, ensure that each period is assigned to a teacher at least once
-    if teacher_count < len(periods):
-        required_periods = set(random.sample(periods, teacher_count))
-        valid_timetables = [timetable for timetable in valid_timetables if set(timetable).issuperset(required_periods)]
 
-    # Create a DataFrame to store the timetable data
-    timetable_df = pd.DataFrame(columns=['Day'] + sections)
 
-    # Iterate through each valid timetable and populate the DataFrame
-    for v in sections:
-        for day, timetable in zip(days, valid_timetables):
-            shuffled_timetable = random.sample(timetable, len(timetable))
-            timetable_data = [day] + shuffled_timetable
-            timetable_df = timetable_df._append(pd.Series(timetable_data, index=timetable_df.columns), ignore_index=True)
 
-    # Set the Day column as the index for better visualization
-    # timetable_df.set_index('Day', inplace=True)
+# import random
+# from itertools import permutations
+# import pandas as pd
 
-    timetable_df.to_excel("Table2.xlsx", index=False, index_label=False)
+# def TestFunc(teacher_count):
+#     # Define the sections, periods, and days
+#     sections = ['Section A', 'Section B', 'Section C', 'Section D', 'Section E']
+#     periods = ["tamil-priya", "english-sathiya", "maths-arun", "science-john", "social-hema"]
+#     days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
 
-# Set the number of teachers available (change this value accordingly)
-teacher_count = 5
+#     # Function to check if the timetable has no duplicate subjects on the same period and day
+#     def is_valid_timetable(timetable):
+#         for day, period in enumerate(timetable):
+#             if timetable.count(period) > 1:
+#                 return False
+#         return True
 
-TestFunc(teacher_count)
+#     # Generate all possible permutations of periods for each day
+#     possible_timetables = permutations(periods, len(days))
+
+#     # Create an empty list to store valid timetables
+#     valid_timetables = []
+
+#     # Iterate through each timetable and check the uniqueness conditions
+#     for timetable in possible_timetables:
+#         if is_valid_timetable(timetable):
+#             valid_timetables.append(timetable)
+
+#     # If teacher_count is less than the total number of periods, ensure that each period is assigned to a teacher at least once
+#     if teacher_count < len(periods):
+#         required_periods = set(random.sample(periods, teacher_count))
+#         valid_timetables = [timetable for timetable in valid_timetables if set(timetable).issuperset(required_periods)]
+
+#     # Create a DataFrame to store the timetable data
+#     timetable_df = pd.DataFrame(columns=['Day'] + sections)
+
+#     # Iterate through each valid timetable and populate the DataFrame
+#     for v in sections:
+#         for day, timetable in zip(days, valid_timetables):
+#             shuffled_timetable = random.sample(timetable, len(timetable))
+#             timetable_data = [day] + shuffled_timetable
+#             timetable_df = timetable_df._append(pd.Series(timetable_data, index=timetable_df.columns), ignore_index=True)
+
+#     # Set the Day column as the index for better visualization
+#     # timetable_df.set_index('Day', inplace=True)
+
+#     timetable_df.to_excel("Table2.xlsx", index=False, index_label=False)
+
+# # Set the number of teachers available (change this value accordingly)
+# teacher_count = 5
+
+# TestFunc(teacher_count)
 
 
 
