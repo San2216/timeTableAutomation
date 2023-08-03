@@ -1,0 +1,154 @@
+import random
+
+from django.http import HttpResponse
+
+# Create your views here.
+from datetime import timedelta
+import pandas as pd
+
+from firstapp.models import Subjects, Class, Classgrade, Gradecount
+
+
+def timeConstrains(school_time, lecture_time, lunch_time, period, break_time, break_count):
+    t1 = timedelta(hours=int(school_time.split('-')[0].split(':')[0]), minutes=0)
+    t2 = timedelta(hours=int(school_time.split('-')[1].split(':')[0]), minutes=0)
+    arrival = t2 - t1
+    arrival = int(arrival.seconds / 60)
+    total_time = int(lecture_time.split(' ')[0]) * int(period) + int(lunch_time.split(' ')[0]) + (
+            int(break_time.split(' ')[0]) * break_count)
+    if arrival >= total_time:
+        print("you are allowed to create table")
+        return 1
+    print("you are not allowed to create table because leture time, lunch time, break time not satisfied.")
+    return 0
+
+
+def rotate_cycle(arr, cycle, period, gradeTotalCounts):
+    tempLengthNo = 0 #to identify the random length is not same
+    arr1 = arr.copy() #taking a copy of subjects
+    if period >= len(arr1):  # if period greater than the subject
+        arr1 *= -(-period // len(arr1))  # Repeat subjects cyclically it will copy of 2*2
+    cycle %= len(arr1)
+    arr1 = arr1[cycle:] + arr1[:cycle]  # reminder value for index
+
+    arr_to_check_duplicate_subject = {} #for checking the duplicate subjects on each day
+    for index, v in enumerate(gradeTotalCounts): #gradeTotalCounts helps for getting a section of period with limitation of period for allocation
+        arr_to_check_duplicate_subject[list(v.keys())[0]] = [] #initally making it as empty array for all subjects from ORM
+
+    for index1, i in enumerate(arr1): #looping each subject with each index
+        if period > index1: #it allow until it checking the limited period is matching with index
+            for index, v in enumerate(gradeTotalCounts): #checking each subject to pop it and allocate the gradetotal count periods by each loop
+                if i == list(v.keys())[0]: #checking whether generated subject is matching with loop of gradeTotalCounts
+                    if gradeTotalCounts[index][i] == 0: #if gradeTotalCounts subjects is zero
+                        result_list = [dct for dct in gradeTotalCounts if any(value != 0 for value in dct.values())] #removing the subjects which is zero and map to subject array
+                        if len(result_list) == 0: #it will check the result_list array length is zero
+                            list_length = 0 #assining the list_length index as 0
+                        else:
+                            arr1.pop(index1) #if not it will delete the subject from the index
+                            random.shuffle(result_list) #will shuffle the result_list so that no repeated subject wil cme
+                            list_length = random.randint(0, len(result_list) - 1) #taking a random index from the result_list
+                            if len(result_list) == 1: #checking the result_list length is 1 then it wont start the while condition
+                                pass
+                            else:
+                                while tempLengthNo == list_length: #tempLengthNo is used to check the perious random index number is matching with current random index
+                                    list_length = random.randint(0, len(result_list) - 1) #if match it will loop until there are not satisfied
+
+                            arr1.insert(index1, list(result_list[list_length].keys())[0]) #insert the new subject to the removed index
+                            indexes_with_list_comp = [index for index, dct in enumerate(gradeTotalCounts) if
+                                                      list(result_list[list_length].keys())[0] in list(dct.keys())[0]]
+                            gradeTotalCounts[indexes_with_list_comp[0]][list(result_list[list_length].keys())[0]] -= 1 #less the count from the old gradeTotalCounts so that we can get the accurate period allocation
+                            tempLengthNo = list_length #assign the current random index to tempLengthNo
+
+                    else:
+                        gradeTotalCounts[index][i] -= 1 #if loop of exist subject not equal to zero it will less the count in gradeTotalCounts and keep the value remind.
+    for index5, w in enumerate(arr1[:period]): #looping the fixed subjects with slicing of period count
+        for s in arr_to_check_duplicate_subject.keys():
+            if w == s:
+                arr_to_check_duplicate_subject[s].append(index5) #to append the index of duplicate subject
+    keys_with_more_than_2 = [{key: value} for key, value in arr_to_check_duplicate_subject.items() if
+                             len(value) > 2] #it will check whether the subject of repetation more than 2 its given as static
+    for v in keys_with_more_than_2: #if keys_with_more_than_2 have one length it will loop
+        for a,b in v.items(): #spliting the dict as key and value
+            tempOOO = len(b)-2 #getting the count of how many maths is assined to current row and removing the index of 2. this 2 is denoted as not more than two subjects
+            for index7, u in enumerate(gradeTotalCounts):
+                if list(u.keys())[0] == list(v.keys())[0]:
+                    gradeTotalCounts[index7][list(u.keys())[0]] += 1 #adding the removed index to gradeTotalCounts so that period wont miss.
+            arr1.pop(b[tempOOO]) #removing the original subjects from generated array eg.([0, 4, 6][1])
+            list_length = random.randint(0, len(result_list) - 1) #again taking random subejcts 
+            while list(v.keys())[0] == result_list[list_length][list(result_list[list_length].keys())[0]]: #if same name came it will loop until it not same
+                list_length = random.randint(0, len(result_list) - 1)
+            arr1.insert(b[tempOOO], list(result_list[list_length].keys())[0]) #once we got new name it will push to tha array
+    print(keys_with_more_than_2)
+    return arr1
+
+
+def generate_table(subject, cycles, days, section, period, gradeTotalCounts):
+    rows = []
+    # for i in range(cycles): # This cycle used for generating 5 tables like 5 sections
+    for cycle in range(days):  # based on subject it will generate the index
+        #rotate_cycle help to make the subjects to based on 8 periods
+        rows.append(
+            rotate_cycle(subject, cycle + cycles, period, gradeTotalCounts))  # subjects with index + section index add
+    rows.append([]) #it will append 1week data of array
+    return rows
+
+
+def startApp(request):
+    school_time = "09:00 - 16:00" #school timing
+    lunch_time = "30 mins" #lunch timing
+    break_time = "10 mins" #break timing
+    lecture_time = "40 mins" #period timing
+    break_count = 2 #break count
+    final_table = [] #final table structure
+    class_count = 0 #to determine how many classes
+    class_grade = Classgrade.objects.all() #getting each class
+    for i in class_grade:
+        count = 0
+        count = count + class_count # increase section whenever loop end
+        classes = Class.objects.filter(classgrade=i.id) #getting the sections
+        if len(classes) == 0:
+            if class_count != 0:
+                class_count = class_count - 1
+        for j in classes:
+            gradecount = Gradecount.objects.filter(classgradeid=i.id).exclude(total=0) #getting subjects with out NAN
+            gradeTotalCounts = [{h.subjectid.subjectname: h.total} for h in gradecount] #making it as list of dict like {'lang':8}
+            gradecount = [h.subjectid.id for h in gradecount] #getting all subject id in list
+            noOfPeriods = j.noofperiod #no of periods
+            noOfDays = j.noofdays #no of working days per week
+            section = j.clsname #section name
+            subject = Subjects.objects.filter(id__in=gradecount) #getting all subjects with count of period for a week
+            subject = [l.subjectname for l in subject] #push the subjects to list
+            # random.shuffle(subject)
+            timeConstrains(school_time, lecture_time, lunch_time, noOfPeriods, break_time, break_count) #time constrain for working hours of a school
+            table = generate_table(subject, count, noOfDays, section, noOfPeriods, gradeTotalCounts) #generating table with each list of list
+            # run only one the period subject count not mactch.
+            for l, k in enumerate(table): #once table generated for 1 week
+                if len(k) > noOfPeriods: #will check the index of period is not more than that
+                    slice = len(k) - noOfPeriods #once it done it will minus the len(k) - period eg. 10-8
+                    for b in reversed(range(slice)):  # remove operation for when the length of each not satisfy eg.2,1,0
+                        if b + 1 == 0:
+                            break
+                        else:
+                            table[l].pop(b + noOfPeriods) #remove the additional periods
+
+            print(table)
+            final_table.append({i.name + ' - ' + section: table}) #appending the section with 1 week of array
+            count += 1
+        class_count += 1
+    # adjusted_arrays = adjust_subjects(table)
+    # for array in adjusted_arrays:
+    #     print(array)
+    tableNew = []
+    for p in final_table:
+        for g in p.values():
+            tableNew.append([list(p.keys())[0]]) #extracting section in first row
+            for v in g:
+                tableNew.append(v) # and reminding array of 1 week data
+    print(tableNew)
+
+
+    # sum(p.Gender == "F" for p in PeopleList)
+
+    result_df = pd.DataFrame(tableNew)
+    result_df.to_excel("Table3.xlsx", index=False, index_label=False)
+    return HttpResponse("Success")
