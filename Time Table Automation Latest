@@ -1,0 +1,198 @@
+def startapp2(request):
+    import random
+    import sys
+    import pandas as pd
+    from deap import base, creator, tools, algorithms
+    from tabulate import tabulate
+
+    # Subject data
+    subjects = []  # Initialize an empty list to store subject data.
+
+    # Genetic Algorithm Parameters
+    POPULATION_SIZE = 50  # Set the size of the population for the genetic algorithm.
+    GENERATIONS = 100  # Set the number of generations for the genetic algorithm.
+    CROSSOVER_PROB = 0.8  # Set the probability of crossover during reproduction.
+    MUTATION_PROB = 0.2  # Set the probability of mutation during reproduction.
+
+    # Number of classes, time slots, and days
+    count_idx = 0  # Initialize a variable to keep track of indices.
+    DAYS_PER_WEEK = 5  # Set the number of days in a week for scheduling.
+    SLOTS_PER_DAY = 8  # Set the number of time slots in a day for scheduling.
+    TIMESLOTS_PER_WEEK = DAYS_PER_WEEK * SLOTS_PER_DAY  # Calculate the total number of time slots in a week.
+    FINAL_TABLE = []  # Initialize an empty list to store the final scheduling tables.
+
+    # Create a Fitness class and a corresponding maximizing objective
+    creator.create("FitnessMax", base.Fitness, weights=(1.0,))  # Create a fitness class for maximizing objectives.
+    creator.create("Individual", list, fitness=creator.FitnessMax)  # Create an individual class with fitness attribute.
+
+    toolbox = base.Toolbox()  # Initialize a toolbox for registering functions.
+    # Custom evaluation function
+    def evaluate_individual(individual):
+        # Initialize a list to keep track of the count of each subject in the timetable.
+        counts = [0] * len(subjects)
+
+        # Initialize the fitness score.
+        fitness = 0
+
+        # Count the occurrences of each subject in the individual's timetable.
+        for subject_idx in individual:
+            counts[subject_idx] += 1
+
+        # Penalize if subjects are scheduled more times than allowed
+        for idx, count in enumerate(counts):
+            # Retrieve the maximum allowed count for the current subject.
+            max_allowed_count = list(subjects[idx].values())[0]
+
+            # Check if the subject's count exceeds the allowed count.
+            if count > max_allowed_count:
+                # Penalize the fitness by the difference between the actual count and the allowed count.
+                fitness -= count - max_allowed_count
+
+        # Penalize if any subject appears more than 2 times in a day
+        for day in range(DAYS_PER_WEEK):
+            # Calculate the start and end indices of time slots for the current day.
+            day_start = day * SLOTS_PER_DAY
+            day_end = (day + 1) * SLOTS_PER_DAY
+
+            # Create a list of subject counts for time slots within the current day.
+            day_counts = [counts[ind] for ind in range(day_start, day_end) if ind < len(counts)]
+
+            # Loop through subject counts for the current day.
+            for subject_count in day_counts:
+                # Check if the subject count for a day exceeds 2.
+                if subject_count > 2:
+                    # Penalize the fitness by the excess count above 2.
+                    fitness -= subject_count - 2
+
+        # Return the calculated fitness score for the individual.
+        return fitness,
+
+    def mutate_individual(individual):
+        # Create a dictionary to track the count of each subject for each day of the week.
+        day_subject_counts = {day: {} for day in range(DAYS_PER_WEEK)}
+
+        # Iterate through each time slot in the individual's timetable.
+        for slot in range(len(individual)):
+            # Get the index of the subject assigned to the current time slot.
+            subject_idx = individual[slot]
+
+            # Determine the day (index) to which the time slot belongs.
+            day = slot // SLOTS_PER_DAY
+
+            # Check if the subject index is not already tracked for the current day.
+            if subject_idx not in day_subject_counts[day]:
+                # If not, initialize the count for the subject for this day.
+                day_subject_counts[day][subject_idx] = 1
+            else:
+                # If already tracked, increment the count of the subject for this day.
+                day_subject_counts[day][subject_idx] += 1
+
+            # Check if the subject appears more than twice on the same day.
+            if day_subject_counts[day][subject_idx] > 2:
+                # Find valid subject indices that can replace the current subject.
+                valid_indices = [idx for idx in range(len(subjects)) if day_subject_counts[day].get(idx, 0) < 2]
+
+                # If there are valid replacements available.
+                if valid_indices:
+                    # Randomly select a replacement subject index.
+                    replacement_subject_idx = random.choice(valid_indices)
+
+                    # Replace the subject in the current time slot with the selected replacement.
+                    individual[slot] = replacement_subject_idx
+
+                    # Decrement the count of the replaced subject for this day.
+                    day_subject_counts[day][subject_idx] -= 1
+
+        # Return the mutated individual (timetable).
+        return individual,
+
+        # Register functions with the toolbox
+        toolbox.register("evaluate", evaluate_individual)  # Register the evaluation function.
+        toolbox.register("mate", tools.cxTwoPoint)  # Register the crossover function.
+        toolbox.register("mutate", mutate_individual)  # Register the mutation function.
+        toolbox.register("select", tools.selTournament, tournsize=3)  # Register the selection function.
+
+    def generate_timetable():
+        pop = toolbox.population(n=POPULATION_SIZE)  # Initialize the population using the toolbox.
+
+        # Redirect stdout to a null file
+        original_stdout = sys.stdout
+        sys.stdout = open('null_file', 'w')  # Temporarily redirect standard output to a file.
+
+        # Apply the genetic algorithm
+        algorithms.eaSimple(pop, toolbox, cxpb=CROSSOVER_PROB, mutpb=MUTATION_PROB, ngen=GENERATIONS)
+
+        # Restore the original stdout
+        sys.stdout = original_stdout
+
+        best_individual = tools.selBest(pop, k=1)[0]  # Select the best individual from the population.
+        return best_individual
+
+    def print_timetable(timetable, class_name):
+        # Print a header for the timetable
+        print(f"Timetable for {class_name}:")
+        print("-------------------------")
+
+        # Define time slot labels
+        time_slots = ["8:00-9:00", "9:00-10:00", "10:00-11:00", "11:00-12:00", "12:00-1:00", "1:00-2:00", "2:00-3:00",
+                      "3:00-4:00"]
+
+        # Initialize a list to store data for the table
+        table_data = []
+
+        # Add a row to the table data indicating the timetable's class name
+        table_data.append([f"Timetable for {class_name}:"])
+
+        # Loop through each day of the week
+        for day in range(DAYS_PER_WEEK):
+            # Create a new row for the current day
+            row = [f"Day {day + 1}"]
+
+            # Loop through each time slot of the day
+            for slot in range(SLOTS_PER_DAY):
+                # Calculate the index of the subject in the timetable based on the current day and slot
+                subject_idx = timetable[day * SLOTS_PER_DAY + slot]
+
+                # Retrieve the subject name from the subjects list using the subject index
+                subject_name = list(subjects[subject_idx].keys())[0]
+
+                # Append the subject name to the row for the current time slot
+                row.append(subject_name)
+
+            # Add the completed row for the current day to the table data
+            table_data.append(row)
+
+        # Append the completed table data for the entire timetable to the final table list
+        FINAL_TABLE.append(table_data)
+
+        # Print the timetable using tabulate with appropriate headers and formatting
+        print(tabulate(table_data, headers=["Day/Time"] + time_slots, tablefmt="grid"))
+
+    random.seed(42)  # Set the random seed for reproducibility.
+
+    class_grade = Classgrade.objects.all()  # getting each class
+    for i in class_grade:
+        classes = Class.objects.filter(classgrade=i.id, )  # getting the sections
+        for index,j in enumerate(classes):
+            gradecount = Gradecount.objects.filter(classgradeid=i.id).exclude(total=0)  # getting subjects with out NAN
+            subjects = [{h.subjectid.subjectname: h.total} for h in
+                                gradecount] #gettign subjects with count for a table
+            # Define attributes and structure of an individual (timetable)
+            toolbox.register("subject_index", random.randint, 0, len(subjects) - 1)  #initizale a name with random number of subject length
+            toolbox.register("individual", tools.initRepeat, creator.Individual, toolbox.subject_index,
+                             n=TIMESLOTS_PER_WEEK) #total number of days with periods 5*8 = 40
+            toolbox.register("population", tools.initRepeat, list, toolbox.individual) # populate the possibility of periods with given number of populations
+
+
+            class_name = f"{i.name} {j.clsname}"
+            timetable = generate_timetable() #Generating best posibilities of random seeds
+            print_timetable(timetable, class_name) #Generating table
+    time_slots = ["8:00-9:00", "9:00-10:00", "10:00-11:00", "11:00-12:00", "12:00-1:00", "1:00-2:00", "2:00-3:00",
+                  "3:00-4:00"]
+    arr = []
+    for i in FINAL_TABLE:
+        for j in i:
+           arr.append(j)
+        arr.append([])  # Add an empty row between tables.
+    result_df = pd.DataFrame(arr, columns=["Day/Time"] + time_slots)  # Create a DataFrame for the final tables.
+    result_df.to_excel("Table4.xlsx", index=False, index_label=False)  # Save the DataFrame to an Excel file.
